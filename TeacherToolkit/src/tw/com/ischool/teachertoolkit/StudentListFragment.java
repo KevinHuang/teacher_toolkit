@@ -25,10 +25,10 @@ import android.widget.ImageView;
 import android.widget.ListView;
 import android.widget.TextView;
 
-public class StudentFragment extends Fragment {
+public class StudentListFragment extends Fragment {
 
-	public static StudentFragment newInstance() {
-		return new StudentFragment();
+	public static StudentListFragment newInstance() {
+		return new StudentListFragment();
 	}
 
 	private ListView mListView;

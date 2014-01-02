@@ -203,6 +203,7 @@ public class StudentDetailActivity extends FragmentActivity {
 				break;
 			}
 
+			fragment.setRetainInstance(true);
 			fragment.setStud(mStud);
 
 			return fragment;

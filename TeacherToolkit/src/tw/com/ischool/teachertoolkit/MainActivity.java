@@ -7,7 +7,8 @@ import tw.com.ischool.oauth2signin.APInfo;
 import tw.com.ischool.oauth2signin.AccessToken;
 import tw.com.ischool.oauth2signin.SignInActivity;
 import tw.com.ischool.oauth2signin.User;
-import tw.com.ischool.teachertoolkit.StudentFragment.SelectStudentListener;
+import tw.com.ischool.oauth2signin.util.Util;
+import tw.com.ischool.teachertoolkit.StudentListFragment.SelectStudentListener;
 import tw.com.ischool.teachertoolkit.db.APDataSource;
 import tw.com.ischool.teachertoolkit.db.ClassDataSource;
 import tw.com.ischool.teachertoolkit.db.StudentDataSource;
@@ -42,6 +43,7 @@ import android.widget.ArrayAdapter;
 import android.widget.ListView;
 import android.widget.SearchView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 public class MainActivity extends FragmentActivity {
 	private final static String fragmemtTag = "StudentFragmentTag";
@@ -62,7 +64,7 @@ public class MainActivity extends FragmentActivity {
 	private ClassDataSource mdsClass;
 	private StudentDataSource mdsStudent;
 	
-	private StudentFragment mStudFrag;
+	private StudentListFragment mStudFrag;
 	
 	private ProgressDialog barProgressDialog;	
 
@@ -74,26 +76,40 @@ public class MainActivity extends FragmentActivity {
 
 		// prepare 資料，初始化 SQL Tables，並讀出 Temp Data */
 		initSQLiteDataSource();
-		reloadDBData();
+		if (savedInstanceState == null)  //第一次開啟 Activity。
+			reloadDBData();
 		
 		initListViewDrawer();
-		
 		initFragment();
-
+		
+		
+		/*
+		 * 1. 判斷是否 DB 中有資料？ 1.1 如果有資料，則顯示學生清單 1.2 如果沒有資料，判斷是否有網路，好進行同步資料 1.2.1
+		 * 如果有網路，則進行同步資料作業 1.2.2 如果沒有網路，則提示使用者開啟網路好進行同步作業。
+		 */
+		List<APInfo> aps = mdsAP.getAPList();
+		if (aps.size() > 0) // DB 中有資料
+		{
+			
+		}
+		else {	//如果沒有資料，判斷是否有網路
+			/*  如果沒有資料，則提示使用者開啟網路，好進行同步資料作業 */
+			if (!Util.isNetworkOnline(getApplicationContext())) {
+				Toast.makeText(getBaseContext(), "請開啟網路，好進行同步資料作業", Toast.LENGTH_LONG).show();
+			}
+			else {	//有網路，則進行同步作業
+				doSyncData();
+			}
+		}
+		
 		mTitle = mDrawerTitle = getTitle();
 		mDrawerLayout = (DrawerLayout) findViewById(R.id.drawer_layout);
 		mDrawerList = (ListView) findViewById(R.id.left_drawer);
-
-//		mPlanetTitles = new String[] { "學校", "班級" };
 
 		// set a custom shadow that overlays the main content when the drawer
 		// opens
 		mDrawerLayout.setDrawerShadow(R.drawable.drawer_shadow,
 				GravityCompat.START);
-		// set up the drawer's list view with items and click listener
-//		mDrawerList.setAdapter(new ArrayAdapter<String>(this,
-//				R.layout.drawer_list_item, mPlanetTitles));
-//		mDrawerList.setOnItemClickListener(new DrawerItemClickListener());
 
 		// enable ActionBar app icon to behave as action to toggle nav drawer
 		getActionBar().setDisplayHomeAsUpEnabled(true);
@@ -122,17 +138,6 @@ public class MainActivity extends FragmentActivity {
 
 		mDrawerLayout.setDrawerListener(mDrawerToggle);
 
-
-		/* 判斷是否登入 */
-		showLog("MainActivity.onCreate() ..... ");
-
-		if (AccessToken.getCurrentAccessToken() == null) {
-			showLog("No AccessToken found, invoke MainActivity.signIn() ..... ");
-			signIn();
-		} else {
-			User user = User.get();
-			showLog("Hello, " + user.getFirstName() + "..... ");
-		}
 	}
 
 	/* Called whenever we call invalidateOptionsMenu() */
@@ -191,18 +196,20 @@ public class MainActivity extends FragmentActivity {
 		mDrawerToggle.onConfigurationChanged(newConfig);
 	}
 
-
-	public void signIn() {
-		showLog("MainActivity.signIn() ..... startActivityForResult( ....); ");
-		Intent i = new Intent(this, SignInActivity.class);
-		startActivityForResult(i, SignInActivity.ACTION_REQUESTCODE);
+	@Override
+	protected void onPause() {
+		mdsAP.closeDatabase();
+		mdsClass.closeDatabase();
+		mdsStudent.closeDatabase();
+		super.onPause();
 	}
 
-	public void signOut() {
-		Intent i = new Intent(this, SignInActivity.class);
-		i.putExtra(SignInActivity.ACTION_TYPE,
-				SignInActivity.ACTION_TYPE_SIGNOUT);
-		startActivityForResult(i, SignInActivity.ACTION_REQUESTCODE);
+	@Override
+	protected void onResume() {
+		mdsAP.openDatabase();
+		mdsClass.openDatabase();
+		mdsStudent.openDatabase();
+		super.onResume();
 	}
 
 	@Override
@@ -224,10 +231,46 @@ public class MainActivity extends FragmentActivity {
 			} else {
 				String errMsg = (data == null) ? "使用者取消登入動作" : data.getExtras()
 						.getString(SignInActivity.SIGNIN_ERROR_MESSAGE);
-
+				showLog(errMsg);
 			}
 		}
 	}
+
+	/*
+	 * 同步資料，首先要檢查是否登入系統
+	 * 1. 若已經登入，則開啟 ProgressBarActivity 進行同步資料
+	 * 2. 若尚未登入，則開啟 SignInActivity 進行登入動作。
+	 * 		2.1 若登入成功，則開啟 ProgressBarActivity 進行同步資料
+	 * 		2.2 若登入失敗，則出現警示使用者 (5 秒後關閉)，並關閉 SignInActivity，回到主畫面
+	 */
+	private void doSyncData() {
+		/* 判斷是否登入 */
+		showLog("MainActivity.doSyncData() ..... ");
+
+		if (AccessToken.getCurrentAccessToken() == null) {
+			showLog("No AccessToken found, invoke MainActivity.signIn() ..... ");
+			signIn();
+		} else {
+			User user = User.get();
+			showLog("Hello, " + user.getFirstName() + "..... ");
+			syncAllData();	
+		}
+	}
+
+	public void signIn() {
+		showLog("MainActivity.signIn() ..... startActivityForResult( ....); ");
+		Intent i = new Intent(this, SignInActivity.class);
+		startActivityForResult(i, SignInActivity.ACTION_REQUESTCODE);
+	}
+
+	public void signOut() {
+		Intent i = new Intent(this, SignInActivity.class);
+		i.putExtra(SignInActivity.ACTION_TYPE,
+				SignInActivity.ACTION_TYPE_SIGNOUT);
+		startActivityForResult(i, SignInActivity.ACTION_REQUESTCODE);
+	}
+	
+
 
 	private void initSQLiteDataSource() {
 		mdsAP = new APDataSource(MainActivity.this);
@@ -249,10 +292,10 @@ public class MainActivity extends FragmentActivity {
 	
 	private void initFragment() {
 		FragmentManager fragmentManager = getSupportFragmentManager();
-		mStudFrag = (StudentFragment)fragmentManager.findFragmentByTag(fragmemtTag);
+		mStudFrag = (StudentListFragment)fragmentManager.findFragmentByTag(fragmemtTag);
 		FragmentTransaction trans = fragmentManager.beginTransaction();
 		if (mStudFrag == null) {
-			mStudFrag = StudentFragment.newInstance();
+			mStudFrag = StudentListFragment.newInstance();
 			mStudFrag.setRetainInstance(true);
 			mStudFrag.setOnSelectStudentListener(new SelectStudentListener() {
 				
@@ -275,6 +318,8 @@ public class MainActivity extends FragmentActivity {
 	private void syncAllData() {
 		showLog("準備開始同步資料 ...");
 		mCurrentAPIndex = 0;
+		
+		onResume();	//makesure all datasource is opened.
 
 		// save applications
 		for (APInfo ap : User.get().getApplications()) {
@@ -311,7 +356,8 @@ public class MainActivity extends FragmentActivity {
 			//2. 更新 Drawer
 			initListViewDrawer();
 			//3. 更新學生 Fragment的清單，會顯示所有學生
-			mStudFrag.refreshUI(true);
+			if (mStudFrag != null)
+				mStudFrag.refreshUI(true);
 			setTitle(mDrawerTitle);
 			//4. 消除 ProgressBar
 			barProgressDialog.dismiss();
@@ -395,11 +441,6 @@ public class MainActivity extends FragmentActivity {
 		});
 	}
 
-	@Override
-	protected void onPause() {
-		super.onPause();
-		
-	}
 
 	@Override
 	public boolean onCreateOptionsMenu(Menu menu) {

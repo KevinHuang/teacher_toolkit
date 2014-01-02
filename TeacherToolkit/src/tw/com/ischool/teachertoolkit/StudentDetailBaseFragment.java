@@ -5,7 +5,7 @@ import android.support.v4.app.Fragment;
 
 public class StudentDetailBaseFragment extends Fragment {
 
-	private StudentInfo mStud;
+	protected StudentInfo mStud;
 
 	public StudentInfo getStud() {
 		return mStud;

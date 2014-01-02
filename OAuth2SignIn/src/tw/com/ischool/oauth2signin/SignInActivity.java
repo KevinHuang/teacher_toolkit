@@ -2,15 +2,12 @@ package tw.com.ischool.oauth2signin;
 
 import ischool.signin.WebAppInterface;
 import ischool.signin.WebAppInterface.OnTokenRetrievedListener;
-
-import java.util.Date;
-
 import tw.com.ischool.oauth2signin.AccessToken.RefreshAccessTokenListener;
 import tw.com.ischool.oauth2signin.util.Util;
-import android.app.Activity;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Bundle;
+import android.support.v4.app.FragmentActivity;
 import android.util.Log;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
@@ -49,7 +46,7 @@ import android.webkit.WebViewClient;
  * 則 Activity 啟動後會停在登入畫面。
  */
 
-public class SignInActivity extends Activity {
+public class SignInActivity extends FragmentActivity {
 
 	/* 如果要執行登出動作，則在 intent 中加入以下參數。 */
 	public final static String ACTION_TYPE = "SignActivity.IsSignOut"; //
